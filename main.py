@@ -8,27 +8,10 @@ This test should take you no more than 30 minutes.
 Using AI is not allowed.
 """
 
-import random
-import time
-from enum import Enum
+import requests
 from logging import Logger
 
-import requests
-from prefect import Task, flow
-from prefect.server.schemas.states import StateType
-from requests import RequestException
-
-from schemas import HodlHodlOfferBase, HodlHodlUserBase, settings
-
-
-
-
-
-class Scraper_Names(Enum):
-    hodlhodl = "hodlhodl"
-
-
-
+from schemas import HodlHodlOfferBase, HodlHodlUserBase
 
 
 class Scraper:
@@ -45,7 +28,7 @@ class Scraper:
             currencies = self.requester.get(url).json()
             for curr in currencies['currencies']:
                 currency_list.append(curr.get("code"))
-        except RequestException as e:
+        except requests.RequestException as e:
             self.logger.error("Error fetching currency list: %s", e)
 
         return currency_list
@@ -58,7 +41,7 @@ class Scraper:
                 offer_info = self.create_offer_data(offer)
                 seller_info = self.create_seller_data(offer)
                 self.post_data_to_api(seller_info, offer_info)
-        except RequestException as e:
+        except requests.RequestException as e:
             self.logger.error("Error fetching offers: %s", e)
 
     def create_offer_data(self, offer):
@@ -101,37 +84,25 @@ class Scraper:
         if cc == "Global":
             cc = 'GL'
 
-        params = {
-            "country_code": cc,
-            "payment_method": offer_info.dict()["payment_method_name"],
-            "payment_method_slug": offer_info.dict()["payment_method_slug"],
-        }
-
         try:
-            return print(params, data)
-
-        except RequestException as e:
-
+            print(params, data)
+        except requests.RequestException as e:
             self.logger.error("Error posting data to API: %s", e)
-
 
     def starter(self):
         currencies_list = self.get_currency_list()
         for curr in currencies_list:
             for trading_type in ["buy", "sell"]:
-                    rate = Task(self.get_and_post_offers, 
-                                name=f"get hodlhodl offers"
-                                ).submit(curr, trading_type, return_state=True)
-                    if rate.type != StateType.COMPLETED or not rate.result():
-                        self.logger.error('Task failed')
-                        continue
+                rate = self.get_and_post_offers(curr, trading_type)
+                if rate is not None:
                     self.logger.debug("Got %s rates", rate)
 
-                    return rate.result()
+        return None
 
-@flow
-def get_hodlhodl_offers():
-    return Scraper().starter()
+
+if __name__ == "__main__":
+    scraper = Scraper()
+    scraper.starter()
     
 
 
